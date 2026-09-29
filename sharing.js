@@ -1,0 +1,9 @@
+(function(root){
+ const encode64=bytes=>{let s='';for(const b of bytes)s+=String.fromCharCode(b);return btoa(s).replaceAll('+','-').replaceAll('/','_').replaceAll('=','')};
+ const decode64=s=>Uint8Array.from(atob(s.replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0));
+ async function transform(bytes,stream){const reader=new Blob([bytes]).stream().pipeThrough(stream).getReader();const chunks=[];let length=0;while(true){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>150000){await reader.cancel();throw Error('Túl nagy naptár')}chunks.push(value)}const out=new Uint8Array(length);let offset=0;for(const c of chunks){out.set(c,offset);offset+=c.length}return out}
+ root.SpookShare={
+ async encode(state,defaults){const payload={v:1,m:state.movies.map((m,i)=>m.title===defaults[i].title&&m.year===defaults[i].year?i:[m.title,m.year,m.poster,m.imdb,m.description||'',m.genres||[]]),s:state.status};const bytes=new TextEncoder().encode(JSON.stringify(payload));if(typeof CompressionStream==='function')return'z'+encode64(await transform(bytes,new CompressionStream('deflate')));return'n'+encode64(bytes)},
+ async decode(token,defaults){if(typeof token!=='string'||token.length>80000||!/^([zn])[A-Za-z0-9_-]+$/.test(token))throw Error('Hibás link');let bytes=decode64(token.slice(1));if(token[0]==='z')bytes=await transform(bytes,new DecompressionStream('deflate'));const p=JSON.parse(new TextDecoder().decode(bytes));if(p.v!==1||!Array.isArray(p.m)||p.m.length!==31||!Array.isArray(p.s)||p.s.length!==31)throw Error('Hibás naptár');return{v:1,movies:p.m.map(m=>{if(Number.isInteger(m)&&m>=0&&m<31)return{...defaults[m]};if(!Array.isArray(m)||typeof m[0]!=='string')throw Error('Hibás film');return{title:m[0],year:m[1],poster:m[2],imdb:m[3],description:m[4],genres:m[5]}}),status:p.s}}
+ };
+})(typeof window!=='undefined'?window:globalThis);
